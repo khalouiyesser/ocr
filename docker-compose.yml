@@ -1,0 +1,25 @@
+version: '1'
+services:
+  user-mangment-api:
+   build: .
+   ports : 
+   - 3000:3000
+   environment : 
+    - JWT_SECRET=secret
+    - MONGO_URL=mongodb://mongodb-service/testauth
+   networks:
+    - 4sim1
+   depends_on:
+    - mongodb-service
+  mongodb-service:
+    image: mongo:5
+    ports:
+      - 3005:27017
+    volumes: 
+     - data:/data/db
+    networks:
+     - 4sim1
+volumes:
+ data:
+networks:
+ 4sim1:
