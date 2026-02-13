@@ -87,7 +87,7 @@ export class OcrService {
         // Conserver tous les caractères utiles pour une facture française
         tessedit_char_whitelist:
           'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz' +
-          "ÀÂÄÉÈÊËÎÏÔÙÛÜÇàâäéèêëîïôùûüç0123456789.,/:€%()+-= @'\"#\n",
+          'ÀÂÄÉÈÊËÎÏÔÙÛÜÇàâäéèêëîïôùûüç0123456789.,/:€%()+-= @\'"#\n',
         // Préserver la mise en page des tableaux
         preserve_interword_spaces: '1',
       } as any);
@@ -99,7 +99,9 @@ export class OcrService {
       const warnings: string[] = [];
       if (confidence < 70) {
         warnings.push(
-          `Confiance OCR faible (${confidence.toFixed(1)}%) — résultats à vérifier manuellement`,
+          `Confiance OCR faible (${confidence.toFixed(
+            1,
+          )}%) — résultats à vérifier manuellement`,
         );
       }
 
@@ -116,35 +118,24 @@ export class OcrService {
   // ═══════════════════════════════════════════════════════════════════════════
 
   private async preprocessImage(buffer: Buffer): Promise<Buffer> {
-    // Lire les métadonnées d'abord pour adapter le traitement
     const metadata = await sharp(buffer).metadata();
     const isHighRes = (metadata.width ?? 0) >= 2000;
 
-    const pipeline = sharp(buffer)
-      // Normaliser l'orientation EXIF (photos prises en portrait/paysage)
+    return sharp(buffer)
       .rotate()
-      // Redimensionner uniquement si trop petit (pour les scans basse résolution)
       .resize({
-        width: isHighRes ? undefined : 2480,
+        width: isHighRes ? 1240 : 1748, // ✅ Moitié moins → 4x plus rapide
         withoutEnlargement: false,
         fit: 'inside',
       })
-      // Convertir en niveaux de gris
       .grayscale()
-      // Normaliser le contraste (améliore les scans ternes)
-      .normalise({ lower: 2, upper: 98 })
-      // Légère réduction du bruit avant seuillage
+      .normalise({ lower: 1, upper: 99 })
       .median(1)
-      // Accentuation de la netteté des bords (texte)
       .sharpen({ sigma: 1.2, m1: 0.5, m2: 3 })
-      // Seuillage adaptatif : 128 est plus doux que 150 → moins de perte sur texte gris
-      .threshold(128)
-      // PNG sans compression pour Tesseract (plus rapide à décoder)
-      .png({ compressionLevel: 0, adaptiveFiltering: false });
-
-    return pipeline.toBuffer();
+      .threshold(140)
+      .png({ compressionLevel: 0, adaptiveFiltering: false })
+      .toBuffer();
   }
-
   // ═══════════════════════════════════════════════════════════════════════════
   // CORRECTION DU BRUIT OCR
   // ═══════════════════════════════════════════════════════════════════════════
@@ -153,22 +144,22 @@ export class OcrService {
     return (
       text
         // ── Corrections chiffres ──
-        .replace(/([0-9])C\b/g, '$10')        // 5C → 50
-        .replace(/\bC([0-9])/g, '0$1')        // C5 → 05
-        .replace(/\bC\b/g, '0')               // C isolé → 0
-        .replace(/\bl\b(?=\s*\d)/g, '1')      // l avant chiffre → 1
-        .replace(/\bO\b(?=\s*\d)/g, '0')      // O avant chiffre → 0
+        .replace(/([0-9])C\b/g, '$10') // 5C → 50
+        .replace(/\bC([0-9])/g, '0$1') // C5 → 05
+        .replace(/\bC\b/g, '0') // C isolé → 0
+        .replace(/\bl\b(?=\s*\d)/g, '1') // l avant chiffre → 1
+        .replace(/\bO\b(?=\s*\d)/g, '0') // O avant chiffre → 0
         .replace(/\bë\b/g, '5')
-        .replace(/\bq\b(?=\s*\d)/g, '9')      // q avant chiffre → 9
-        .replace(/\bI\b(?=\s*\d)/g, '1')      // I avant chiffre → 1
+        .replace(/\bq\b(?=\s*\d)/g, '9') // q avant chiffre → 9
+        .replace(/\bI\b(?=\s*\d)/g, '1') // I avant chiffre → 1
         .replace(/(?<=\d)\s*,\s*(?=\d{2}\b)/g, ',') // normaliser "1 234 , 56" → "1 234,56"
         // ── Corrections lettres ──
         .replace(/!/g, 'i')
         // ── Nettoyage ponctuation parasite ──
-        .replace(/[|]{1}/g, 'I')              // | → I (tableaux)
-        .replace(/\f/g, '\n')                 // form feed → newline
-        .replace(/\r\n/g, '\n')               // CRLF → LF
-        .replace(/[ \t]{3,}/g, '  ')          // 3+ espaces → 2 espaces (conserver la séparation colonnes)
+        .replace(/[|]{1}/g, 'I') // | → I (tableaux)
+        .replace(/\f/g, '\n') // form feed → newline
+        .replace(/\r\n/g, '\n') // CRLF → LF
+        .replace(/[ \t]{3,}/g, '  ') // 3+ espaces → 2 espaces (conserver la séparation colonnes)
     );
   }
 
@@ -185,12 +176,12 @@ export class OcrService {
     const fixedText = this.fixOcrNoise(cleanText);
 
     return {
-      vendeur:     this.extractParty(fixedText, 'vendeur'),
-      client:      this.extractParty(fixedText, 'client'),
+      vendeur: this.extractParty(fixedText, 'vendeur'),
+      client: this.extractParty(fixedText, 'client'),
       ...this.extractMetadata(fixedText),
       informations_additionnelles: this.extractInfosAdditionnelles(cleanText),
-      articles:    this.extractArticles(fixedText),
-      totaux:      this.extractTotaux(fixedText),
+      articles: this.extractArticles(fixedText),
+      totaux: this.extractTotaux(fixedText),
       meta: {
         confidence,
         rawText: cleanText,
@@ -207,29 +198,44 @@ export class OcrService {
    * Extraction générique d'une partie (vendeur ou client).
    * Gère : nom, adresse, code postal + ville, email, téléphone, SIRET.
    */
-  private extractParty(text: string, type: 'vendeur' | 'client'): Address | null {
+  private extractParty(
+    text: string,
+    type: 'vendeur' | 'client',
+  ): Address | null {
     // Délimiter le bloc selon le type
     const blockPatterns: Record<string, RegExp> = {
-      vendeur: /Vendeur\s*[:\n]?\s*([\s\S]*?)(?=\n(?:Client|Acheteur|Destinataire)\b)/i,
-      client:  /(?:Client|Acheteur|Destinataire)\s*[:\n]?\s*([\s\S]*?)(?=\n(?:Date|N°|Numéro|Référence|Facture)\b)/i,
+      vendeur:
+        /Vendeur\s*[:\n]?\s*([\s\S]*?)(?=\n(?:Client|Acheteur|Destinataire)\b)/i,
+      client:
+        /(?:Client|Acheteur|Destinataire)\s*[:\n]?\s*([\s\S]*?)(?=\n(?:Date|N°|Numéro|Référence|Facture)\b)/i,
     };
 
     const blockMatch = text.match(blockPatterns[type]);
     if (!blockMatch) return null;
 
     const block = blockMatch[1].trim();
-    const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
+    const lines = block
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
     if (!lines.length) return null;
 
     // ── Extraction structurée dans le bloc ──
-    const emailMatch    = block.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
-    const phoneMatch    = block.match(/(?:Tél?\.?|Tel|Phone|📞)?\s*((?:\+33|0)[1-9](?:[\s.-]?\d{2}){4})/i);
-    const siretMatch    = block.match(/(?:SIRET|SIREN)\s*[:\s]?\s*(\d[\d\s]{12,14}\d)/i);
-    const postalMatch   = block.match(/(\d{5})\s+([A-ZÀ-Ü][a-zà-ü\s-]+)/);
+    const emailMatch = block.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
+    const phoneMatch = block.match(
+      /(?:Tél?\.?|Tel|Phone|📞)?\s*((?:\+33|0)[1-9](?:[\s.-]?\d{2}){4})/i,
+    );
+    const siretMatch = block.match(
+      /(?:SIRET|SIREN)\s*[:\s]?\s*(\d[\d\s]{12,14}\d)/i,
+    );
+    const postalMatch = block.match(/(\d{5})\s+([A-ZÀ-Ü][a-zà-ü\s-]+)/);
 
     // ── Nettoyage du nom ──
     const cleanName = (s: string) =>
-      s.replace(/!/g, 'i').replace(/^\d+\.\s*/, '').trim();
+      s
+        .replace(/!/g, 'i')
+        .replace(/^\d+\.\s*/, '')
+        .trim();
 
     // La première ligne non-métadonnée = nom
     const nomLine = lines.find(
@@ -237,16 +243,18 @@ export class OcrService {
     );
 
     // Ligne adresse = contient un numéro de rue
-    const adresseLine = lines.find((l) => l.match(/^\d+[,\s]|(?:rue|avenue|bd|chemin|allée|impasse)/i));
+    const adresseLine = lines.find((l) =>
+      l.match(/^\d+[,\s]|(?:rue|avenue|bd|chemin|allée|impasse)/i),
+    );
 
     return {
-      nom:          nomLine ? cleanName(nomLine) : null,
-      adresse:      adresseLine ?? (lines[1] ?? null),
-      code_postal:  postalMatch ? postalMatch[1] : null,
-      ville:        postalMatch ? postalMatch[2].trim() : null,
-      email:        emailMatch ? emailMatch[0] : null,
-      telephone:    phoneMatch ? phoneMatch[1].replace(/[\s.-]/g, '') : null,
-      siret:        siretMatch ? siretMatch[1].replace(/\s/g, '') : null,
+      nom: nomLine ? cleanName(nomLine) : null,
+      adresse: adresseLine ?? lines[1] ?? null,
+      code_postal: postalMatch ? postalMatch[1] : null,
+      ville: postalMatch ? postalMatch[2].trim() : null,
+      email: emailMatch ? emailMatch[0] : null,
+      telephone: phoneMatch ? phoneMatch[1].replace(/[\s.-]/g, '') : null,
+      siret: siretMatch ? siretMatch[1].replace(/\s/g, '') : null,
     };
   }
 
@@ -293,11 +301,11 @@ export class OcrService {
     );
 
     return {
-      date_facturation:   dateFactMatch ? dateFactMatch[1] : (allDates[0] ?? null),
-      date_echeance:      dateEchMatch  ? dateEchMatch[1]  : (allDates[1] ?? null),
-      numero_facture:     numMatch      ? numMatch[1]      : null,
-      conditions_paiement: condMatch   ? condMatch[1].trim() : null,
-      reference_commande: refMatch     ? refMatch[1]      : null,
+      date_facturation: dateFactMatch ? dateFactMatch[1] : allDates[0] ?? null,
+      date_echeance: dateEchMatch ? dateEchMatch[1] : allDates[1] ?? null,
+      numero_facture: numMatch ? numMatch[1] : null,
+      conditions_paiement: condMatch ? condMatch[1].trim() : null,
+      reference_commande: refMatch ? refMatch[1] : null,
     };
   }
 
@@ -311,19 +319,16 @@ export class OcrService {
     total_ttc: number | null;
   } {
     const montantRx = (label: string) =>
-      new RegExp(
-        `${label}\\s*[:|]?\\s*(\\d[\\d\\s]*[.,]\\d{2})\\s*€?`,
-        'i',
-      );
+      new RegExp(`${label}\\s*[:|]?\\s*(\\d[\\d\\s]*[.,]\\d{2})\\s*€?`, 'i');
 
-    const htMatch  = text.match(montantRx('Total\\s*H\\.?T\\.?'));
+    const htMatch = text.match(montantRx('Total\\s*H\\.?T\\.?'));
     const tvaMatch = text.match(montantRx('(?:Total\\s*)?TVA'));
     const ttcMatch = text.match(
       montantRx('(?:Total\\s*)?(?:TTC|Net\\s*à\\s*payer|Montant\\s*total)'),
     );
 
     return {
-      total_ht:  htMatch  ? this.parseMontant(htMatch[1])  : null,
+      total_ht: htMatch ? this.parseMontant(htMatch[1]) : null,
       total_tva: tvaMatch ? this.parseMontant(tvaMatch[1]) : null,
       total_ttc: ttcMatch ? this.parseMontant(ttcMatch[1]) : null,
     };
@@ -342,7 +347,7 @@ export class OcrService {
 
     const lines = tableBlock[0]
       .split('\n')
-      .slice(1)              // sauter la ligne d'en-tête
+      .slice(1) // sauter la ligne d'en-tête
       .map((l) => l.trim())
       .filter((l) => l.length > 3 && !this.isHeaderLine(l));
 
@@ -361,7 +366,9 @@ export class OcrService {
    * Détecte si une ligne est un en-tête de colonne à ignorer.
    */
   private isHeaderLine(line: string): boolean {
-    return /^(?:Description|Désignation|Qté?|Quantité|Prix\s*HT|TVA|Total|Montant|Unité)/i.test(line);
+    return /^(?:Description|Désignation|Qté?|Quantité|Prix\s*HT|TVA|Total|Montant|Unité)/i.test(
+      line,
+    );
   }
 
   /**
@@ -379,7 +386,7 @@ export class OcrService {
 
     // Extraire le % TVA
     const tvaMatch = line.match(/(\d{1,3})\s*%/);
-    const tva_pct  = tvaMatch ? parseInt(tvaMatch[1], 10) : null;
+    const tva_pct = tvaMatch ? parseInt(tvaMatch[1], 10) : null;
 
     // Extraire l'unité (h, m², kg, u, pièce, forfait...)
     const uniteMatch = line.match(
@@ -391,25 +398,41 @@ export class OcrService {
     const qteMatch = line.match(
       /^[\w\s'\-œæ\/(),.]+?\s{2,}(\d{1,5}(?:[.,]\d{1,3})?)\b/i,
     );
-    const quantite = qteMatch ? parseFloat(qteMatch[1].replace(',', '.')) : null;
+    const quantite = qteMatch
+      ? parseFloat(qteMatch[1].replace(',', '.'))
+      : null;
 
     // Extraire la description : tout avant le premier double-espace + chiffre
-    const descMatch = line.match(/^([\w\s'\-œæ\/(),.éèêëàâùûüîïôçÉÈÊÀÂÙÛÜÎÏÔÇ]+?)(?=\s{2,}\d)/i);
+    const descMatch = line.match(
+      /^([\w\s'\-œæ\/(),.éèêëàâùûüîïôçÉÈÊÀÂÙÛÜÎÏÔÇ]+?)(?=\s{2,}\d)/i,
+    );
     const description = descMatch ? descMatch[1].trim() : null;
 
     if (!description || description.length < 2) return null;
 
     // Attribution positionnelle des montants (de droite à gauche)
     // Ordre attendu : prix_ht, total_ht_ligne, total_tva_ligne, total_ttc_ligne
-    const total_ttc = montants.length >= 1 ? montants[montants.length - 1] : null;
-    const total_tva = montants.length >= 2 ? montants[montants.length - 2] : null;
-    const total_ht  = montants.length >= 3 ? montants[montants.length - 3] : null;
-    const prix_ht   = montants.length >= 4 ? montants[montants.length - 4] : null;
+    const total_ttc =
+      montants.length >= 1 ? montants[montants.length - 1] : null;
+    const total_tva =
+      montants.length >= 2 ? montants[montants.length - 2] : null;
+    const total_ht =
+      montants.length >= 3 ? montants[montants.length - 3] : null;
+    const prix_ht = montants.length >= 4 ? montants[montants.length - 4] : null;
 
     const validation =
       total_ttc && tva_pct && (prix_ht ?? total_ht) && quantite
-        ? this.validateArticle(quantite, prix_ht ?? total_ht!, tva_pct, total_tva, total_ttc)
-        : { _ocr_warning: 'Valeurs partiellement extraites — vérification recommandée' };
+        ? this.validateArticle(
+            quantite,
+            prix_ht ?? total_ht!,
+            tva_pct,
+            total_tva,
+            total_ttc,
+          )
+        : {
+            _ocr_warning:
+              'Valeurs partiellement extraites — vérification recommandée',
+          };
 
     return {
       description,
@@ -460,11 +483,11 @@ export class OcrService {
     total_tva: number | null,
     total_ttc: number,
   ): { _validated: boolean } | { _ocr_warning: string } {
-    const base        = quantite * prix_ht;
+    const base = quantite * prix_ht;
     const expectedTtc = Math.round(base * (1 + tva_pct / 100) * 100) / 100;
     const expectedTva = Math.round(base * (tva_pct / 100) * 100) / 100;
-    const diffTtc     = Math.abs(expectedTtc - total_ttc);
-    const diffTva     = total_tva ? Math.abs(expectedTva - total_tva) : 0;
+    const diffTtc = Math.abs(expectedTtc - total_ttc);
+    const diffTva = total_tva ? Math.abs(expectedTva - total_tva) : 0;
 
     if (diffTtc > 1 || diffTva > 1) {
       return {
@@ -491,14 +514,20 @@ export class OcrService {
    * Convertit "1 350,00" ou "1350.00" en nombre flottant.
    */
   private parseMontant(raw: string): number {
-    return parseFloat(
-      raw.trim().replace(/\s/g, '').replace(',', '.'),
-    );
+    return parseFloat(raw.trim().replace(/\s/g, '').replace(',', '.'));
   }
 
   // ─── CRUD boilerplate ─────────────────────────────────────────────────────
-  findAll()                              { return `This action returns all ocr`; }
-  findOne(id: number)                    { return `This action returns a #${id} ocr`; }
-  update(id: number, _dto: UpdateOcrDto) { return `This action updates a #${id} ocr`; }
-  remove(id: number)                     { return `This action removes a #${id} ocr`; }
+  findAll() {
+    return `This action returns all ocr`;
+  }
+  findOne(id: number) {
+    return `This action returns a #${id} ocr`;
+  }
+  update(id: number, _dto: UpdateOcrDto) {
+    return `This action updates a #${id} ocr`;
+  }
+  remove(id: number) {
+    return `This action removes a #${id} ocr`;
+  }
 }

@@ -13,7 +13,12 @@ async function bootstrap() {
     }),
   );
 
-  // Render injecte la variable PORT automatiquement
+  // ✅ Augmenter le timeout HTTP à 5 minutes
+  const server = app.getHttpServer();
+  server.setTimeout(8 * 60 * 1000); // 5 minutes
+  server.keepAliveTimeout = 5 * 60 * 1000;
+  server.headersTimeout = 5 * 60 * 1000 + 1000;
+
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
   console.log(`Application running on port ${port}`);
