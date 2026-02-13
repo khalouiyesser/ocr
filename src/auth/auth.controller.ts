@@ -12,20 +12,20 @@ import { ResetPasswordDto } from './dtos/reset-password.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('signup')
-  async signUp(@Body() signupData: string) {
-    return this.authService.signup(signupData);
-  }
+  // @Post('signup')
+  // async signUp(@Body() signupData: string) {
+  //   return this.authService.signup(signupData);
+  // }
 
   @Post('login')
   async login(@Body() email: string) {
     return this.authService.login(email);
   }
 
-  @Post('refresh')
-  async refreshTokens(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.refreshTokens(refreshTokenDto.refreshToken);
-  }
+  // @Post('refresh')
+  // async refreshTokens(@Body() refreshTokenDto: RefreshTokenDto) {
+  //   return this.authService.refreshTokens(refreshTokenDto.refreshToken);
+  // }
 
   @UseGuards(AuthenticationGuard)
   @Put('change-password')
