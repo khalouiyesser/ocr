@@ -8,11 +8,11 @@ import {
   Patch,
   Delete,
   Body,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { OcrService } from './ocr.service';
 import { UpdateOcrDto } from './dto/update-ocr.dto';
-import { log } from 'node:util';
 
 @Controller('ocr')
 export class OcrController {
@@ -21,8 +21,7 @@ export class OcrController {
   @Post()
   @UseInterceptors(FileInterceptor('file'))
   async processInvoice(@UploadedFile() file: Express.Multer.File) {
-    log("11111111111111111111111111111111111111111111111");
-    if (!file) throw new Error('Fichier non reçu');
+    if (!file) throw new BadRequestException('Fichier non reçu');
     return this.ocrService.processInvoice(file);
   }
 

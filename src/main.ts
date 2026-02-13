@@ -1,14 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { ExpressAdapter } from '@nestjs/platform-express';
-import * as express from 'express';
 
 async function bootstrap() {
-  const server = express();
-  const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
+  const app = await NestFactory.create(AppModule);
 
-  // Pipe de validation global
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -17,8 +13,10 @@ async function bootstrap() {
     }),
   );
 
-  await app.listen(3000, '0.0.0.0');
-  console.log('Application running on http://0.0.0.0:3000');
+  // Render injecte la variable PORT automatiquement
+  const port = process.env.PORT || 3000;
+  await app.listen(port, '0.0.0.0');
+  console.log(`Application running on port ${port}`);
 }
 
 bootstrap();
